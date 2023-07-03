@@ -1,0 +1,25 @@
+{
+  "name": "mod",
+  "version": "1.0.0",
+  "description": "armcord helper mod",
+  "main": "dist/bundle.js",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -cw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArmCord/Mod.git"
+  },
+  "author": "smartfrigde",
+  "license": "OSL-3.0",
+  "bugs": {
+    "url": "https://github.com/ArmCord/Mod/issues"
+  },
+  "homepage": "https://github.com/ArmCord/Mod#readme",
+  "dependencies": {
+    "rollup": "^3.26.0",
+    "rollup-plugin-serve": "^2.0.2"
+  }
+}
