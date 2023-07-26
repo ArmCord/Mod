@@ -1,4 +1,5 @@
 import serve from 'rollup-plugin-serve';
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 const prod = !process.env.ROLLUP_WATCH;
 export default [{
     input: './src/index.js',
@@ -17,7 +18,7 @@ export default [{
             headers: {
               'Access-Control-Allow-Origin': '*',
             }
-          })
+          }), nodeResolve()
     ]
   }];
   

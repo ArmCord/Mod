@@ -6,8 +6,9 @@ window.ACHelper = {
     patchScreenshareQuality: patchScreenshareQuality
 }
 try {
-    log("Loading desktop keybinds patch!")
-    inject()
+    log("Loading screenshare quality patch!")
+    //inject()
+    patchScreenshareQuality(60, 720)
 } catch (e) {
     console.error(e)
 }
