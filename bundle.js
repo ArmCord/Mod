@@ -244,13 +244,6 @@ function proxyLazy(factory) {
 
     return new Proxy(proxyDummy, handler);
 }
-
-/**
- * find but lazy
- */
-function findLazy(filter, getDefault = true) {
-    return proxyLazy(() => find(filter, getDefault));
-}
 /**
  * Finds a mangled module by the provided code "code" (must be unique and can be anywhere in the module)
  * then maps it into an easily usable module via the specified mappers
@@ -475,37 +468,16 @@ var getPatchFunc = (patchType) => (funcName, funcParent, callback, oneTime = fal
     }, false);
     // var arr = Array.from(findByProps("getAttenuateWhileSpeakingOthers").getMediaEngine().connections.entries())
     // arr[1][0].videoStreamParameters[0].maxResolution = {type: 'fixed', width: width, height: height}
-}/*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2023 Vendicated and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
-mapMangledModuleLazy("mod+alt+down", {
-    CtrlTab: m => m.binds?.at(-1) === "ctrl+tab",
-    CtrlShiftTab: m => m.binds?.at(-1) === "ctrl+shift+tab",
-});
-
-findLazy(m => m.binds?.[0] === "mod+1");
-findLazy(m => m.emitter?._events?.INSERT_TEXT);log("Loading...");
-window.ACHelper = {
-    patchScreenshareQuality: patchScreenshareQuality
-};
-try {
-    log("Loading screenshare quality patch!");
-    //inject()
-    patchScreenshareQuality(60, 720);
-} catch (e) {
-    console.error(e);
+}if (window.armcord) {
+    log("Loading...");
+    window.ACHelper = {
+        patchScreenshareQuality: patchScreenshareQuality
+    };
+    try {
+        log("Loading screenshare quality patch!");
+        //inject()
+        patchScreenshareQuality(60, 720);
+    } catch (e) {
+        console.error(e);
+    }
 }})();
