@@ -166,9 +166,6 @@ if (window[WEBPACK_CHUNK]) {
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-let SelectedGuildStore;
-let FluxDispatcher;
-let SettingsRouter;
 
 function log(data) {
     console.log("%c[Helper]", "color: blue;", data);
@@ -227,14 +224,7 @@ function find(filter, getDefault = true, isWaitFor = false) {
         }
 
     return isWaitFor ? [null, null] : null;
-}
-/**
- * Find the first module that has the specified properties
- */
-function findByProps(...props) {
-    return find(filters.byProps(...props));
-}
-const GET_KEY = Symbol.for("helper.lazy.get");
+}const GET_KEY = Symbol.for("helper.lazy.get");
 const CACHED_KEY = Symbol.for("helper.lazy.cached");
 const handler = {};
 /**
@@ -322,7 +312,7 @@ function waitForStore(name, cb) {
     waitFor(filters.byStoreName(name), cb);
 }
 
-const NavigationRouter = mapMangledModuleLazy("transitionToGuild - ", {
+mapMangledModuleLazy("transitionToGuild - ", {
     transitionTo: filters.byCode("transitionTo -"),
     transitionToGuild: filters.byCode("transitionToGuild -"),
     goBack: filters.byCode("goBack()"),
@@ -330,7 +320,6 @@ const NavigationRouter = mapMangledModuleLazy("transitionToGuild - ", {
 });
 
 waitFor(["dispatch", "subscribe"], m => {
-    FluxDispatcher = m;
     const cb = () => {
         m.unsubscribe("CONNECTION_OPEN", cb);
         _resolveReady();
@@ -338,11 +327,154 @@ waitFor(["dispatch", "subscribe"], m => {
     m.subscribe("CONNECTION_OPEN", cb);
 });
 
-waitForStore("SelectedGuildStore", m => SelectedGuildStore = m);
-waitFor(["open", "saveAccountChanges"], m => SettingsRouter = m);
-waitFor(["open", "saveAccountChanges"], m => SettingsRouter = m);function patchScreenshareQuality(width, height) {
-    var arr = Array.from(findByProps("getAttenuateWhileSpeakingOthers").getMediaEngine().connections.entries());
-    arr[1][0].videoStreamParameters[0].maxResolution = {type: 'fixed', width: width, height: height};
+waitForStore("SelectedGuildStore", m => m);
+waitFor(["open", "saveAccountChanges"], m => m);
+waitFor(["open", "saveAccountChanges"], m => m);// we use this array multiple times
+const patchTypes = ["a", "b", "i"];
+const patchedObjects = new Map();// calls relevant patches and returns the final result
+function hook (funcName, funcParent, funcArgs, 
+// the value of `this` to apply
+ctxt, 
+// if true, the function is actually constructor
+isConstruct) {
+    const patch = patchedObjects.get(funcParent)?.[funcName];
+    // This is in the event that this function is being called after all patches are removed.
+    if (!patch)
+        return isConstruct
+            ? Reflect.construct(funcParent[funcName], funcArgs, ctxt)
+            : funcParent[funcName].apply(ctxt, funcArgs);
+    // Before patches
+    for (const hook of patch.b.values()) {
+        const maybefuncArgs = hook.call(ctxt, funcArgs);
+        if (Array.isArray(maybefuncArgs))
+            funcArgs = maybefuncArgs;
+    }
+    // Instead patches
+    let workingRetVal = [...patch.i.values()].reduce((prev, current) => (...args) => current.call(ctxt, args, prev), 
+    // This calls the original function
+    (...args) => isConstruct
+        ? Reflect.construct(patch.o, args, ctxt)
+        : patch.o.apply(ctxt, args))(...funcArgs);
+    // After patches
+    for (const hook of patch.a.values())
+        workingRetVal = hook.call(ctxt, funcArgs, workingRetVal) ?? workingRetVal;
+    return workingRetVal;
+}function unpatch(funcParent, funcName, hookId, type) {
+    const patchedObject = patchedObjects.get(funcParent);
+    const patch = patchedObject?.[funcName];
+    if (!patch?.[type].has(hookId))
+        return false;
+    patch[type].delete(hookId);
+    // If there are no more hooks for every type, remove the patch
+    if (patchTypes.every((t) => patch[t].size === 0)) {
+        // reflect defineproperty is like object defineproperty
+        // but instead of erroring it returns if it worked or not.
+        // this is more easily minifiable, hence its use. -- sink
+        const success = Reflect.defineProperty(funcParent, funcName, {
+            value: patch.o,
+            writable: true,
+            configurable: true,
+        });
+        if (!success)
+            funcParent[funcName] = patch.o;
+        delete patchedObject[funcName];
+    }
+    if (Object.keys(patchedObject).length == 0)
+        patchedObjects.delete(funcParent);
+    return true;
+}// curried - getPatchFunc("before")(...)
+// allows us to apply an argument while leaving the rest open much cleaner.
+// functional programming strikes again! -- sink
+// creates a hook if needed, else just adds one to the patches array
+var getPatchFunc = (patchType) => (funcName, funcParent, callback, oneTime = false) => {
+    if (typeof funcParent[funcName] !== "function")
+        throw new Error(`${funcName} is not a function in ${funcParent.constructor.name}`);
+    if (!patchedObjects.has(funcParent))
+        patchedObjects.set(funcParent, {});
+    const parentInjections = patchedObjects.get(funcParent);
+    if (!parentInjections[funcName]) {
+        const origFunc = funcParent[funcName];
+        // note to future me optimising for size: extracting new Map() to a func increases size --sink
+        parentInjections[funcName] = {
+            o: origFunc,
+            b: new Map(),
+            i: new Map(),
+            a: new Map(),
+        };
+        const runHook = (ctxt, args, construct) => {
+            const ret = hook(funcName, funcParent, args, ctxt, construct);
+            if (oneTime)
+                unpatchThisPatch();
+            return ret;
+        };
+        const replaceProxy = new Proxy(origFunc, {
+            apply: (_, ctxt, args) => runHook(ctxt, args, false),
+            construct: (_, args) => runHook(origFunc, args, true),
+            get: (target, prop, receiver) => prop == "toString"
+                ? origFunc.toString.bind(origFunc)
+                : Reflect.get(target, prop, receiver),
+        });
+        // this works around breaking some async find implementation which listens for assigns via proxy
+        // see comment in unpatch.ts
+        const success = Reflect.defineProperty(funcParent, funcName, {
+            value: replaceProxy,
+            configurable: true,
+            writable: true,
+        });
+        if (!success)
+            funcParent[funcName] = replaceProxy;
+    }
+    const hookId = Symbol();
+    const unpatchThisPatch = () => unpatch(funcParent, funcName, hookId, patchType);
+    parentInjections[funcName][patchType].set(hookId, callback);
+    return unpatchThisPatch;
+};const after = getPatchFunc("a");function patchScreenshareQuality(framerate, height) {
+    const StreamQuality = find(m => m.prototype?.getVideoQuality);
+    const ASPECT_RATIO = 16 / 9;
+    const width = Math.round(height * ASPECT_RATIO);
+
+    after("getVideoQuality", StreamQuality.prototype, (response) => {
+        response = {
+            bitrateMin: 500000,
+            bitrateMax: 8000000,
+            localWant: 100,
+            capture: {
+                framerate,
+                width,
+                height,
+                pixelCount: height * width
+            },
+            encode: {
+                framerate,
+                width,
+                height,
+                pixelCount: height * width
+            }
+        };
+        return response;
+    }, false);
+    after("getQuality", StreamQuality.prototype, (response) => {        
+        response = {
+            bitrateMin: 500000,
+            bitrateMax: 8000000,
+            localWant: 100,
+            capture: {
+                framerate,
+                width,
+                height,
+                pixelCount: height * width
+            },
+            encode: {
+                framerate,
+                width,
+                height,
+                pixelCount: height * width
+            }
+        };
+        return response;
+    }, false);
+    // var arr = Array.from(findByProps("getAttenuateWhileSpeakingOthers").getMediaEngine().connections.entries())
+    // arr[1][0].videoStreamParameters[0].maxResolution = {type: 'fixed', width: width, height: height}
 }/*
  * Vencord, a modification for Discord's desktop app
  * Copyright (c) 2023 Vendicated and contributors
@@ -360,56 +492,20 @@ waitFor(["open", "saveAccountChanges"], m => SettingsRouter = m);function patchS
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-const GuildNavBinds = mapMangledModuleLazy("mod+alt+down", {
+mapMangledModuleLazy("mod+alt+down", {
     CtrlTab: m => m.binds?.at(-1) === "ctrl+tab",
     CtrlShiftTab: m => m.binds?.at(-1) === "ctrl+shift+tab",
 });
 
-const DigitBinds = findLazy(m => m.binds?.[0] === "mod+1");
-const ComponentDispatch = findLazy(m => m.emitter?._events?.INSERT_TEXT);
-function onKey(e) {
-    const hasCtrl = e.ctrlKey || (e.metaKey && navigator.platform.includes("Mac"));
-
-    if (hasCtrl) switch (e.key) {
-        case "t":
-        case "T":
-            e.preventDefault();
-            if (e.shiftKey) {
-                if (SelectedGuildStore.getGuildId()) NavigationRouter.transitionToGuild("@me");
-                ComponentDispatch.safeDispatch("TOGGLE_DM_CREATE");
-            } else {
-                FluxDispatcher.dispatch({
-                    type: "QUICKSWITCHER_SHOW",
-                    query: "",
-                    queryMode: null
-                });
-            }
-            break;
-        case ",":
-            e.preventDefault();
-            SettingsRouter.open("My Account");
-            break;
-        case "Tab":
-            const handler = e.shiftKey ? GuildNavBinds.CtrlShiftTab : GuildNavBinds.CtrlTab;
-            handler.action(e);
-            break;
-        default:
-            if (e.key >= "1" && e.key <= "9") {
-                e.preventDefault();
-                DigitBinds.action(e, `mod+${e.key}`);
-            }
-            break;
-    }
-}
-function inject() {
-    document.addEventListener("keydown", onKey);
-}log("Loading...");
+findLazy(m => m.binds?.[0] === "mod+1");
+findLazy(m => m.emitter?._events?.INSERT_TEXT);log("Loading...");
 window.ACHelper = {
     patchScreenshareQuality: patchScreenshareQuality
 };
 try {
-    log("Loading desktop keybinds patch!");
-    inject();
+    log("Loading screenshare quality patch!");
+    //inject()
+    patchScreenshareQuality(60, 720);
 } catch (e) {
     console.error(e);
 }})();
