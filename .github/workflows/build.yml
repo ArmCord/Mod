@@ -28,7 +28,7 @@ jobs:
               run: pnpm build
             
             - name: Create CNAME File
-              run: echo "helper.armcord.xyz" >> dist/CNAME
+              run: echo "helper.armcord.app" >> dist/CNAME
 
             - name: Deploy to GH Pages 🚀
               uses: peaceiris/actions-gh-pages@v3
